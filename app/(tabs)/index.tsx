@@ -22,7 +22,6 @@ export default function WardrobeScreen() {
   const { clothingItems, isLoading, addClothingItem } = useWardrobe();
   const [selectedCategory, setSelectedCategory] = useState<ClothingCategory | 'all'>('all');
   const [pendingImages, setPendingImages] = useState<PendingImage[]>([]);
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -32,6 +31,9 @@ export default function WardrobeScreen() {
     }
     return clothingItems.filter(item => item.category === selectedCategory);
   }, [clothingItems, selectedCategory]);
+
+  const currentImage = pendingImages[currentImageIndex];
+  const showModal = pendingImages.length > 0;
 
   const handleCategoryPress = (category: ClothingCategory | 'all') => {
     if (Platform.OS !== 'web') {
@@ -81,22 +83,22 @@ export default function WardrobeScreen() {
 
       // 保存到应用目录
       const timestamp = Date.now();
-      const imageFilename = `img_${timestamp}.jpg`;
-      const thumbnailFilename = `thumb_${timestamp}.jpg`;
+      const randomId = Math.random().toString(36).substr(2, 9);
+      const imageFilename = `img_${timestamp}_${randomId}.jpg`;
+      const thumbnailFilename = `thumb_${timestamp}_${randomId}.jpg`;
 
       const savedImageUri = await saveImageToAppDirectory(compressedUri, imageFilename);
       const savedThumbnailUri = await saveImageToAppDirectory(thumbnailUri, thumbnailFilename);
 
       // 添加到待处理列表
       const newImage: PendingImage = {
-        id: `pending_${Date.now()}`,
+        id: `pending_${timestamp}_${randomId}`,
         imageUri: savedImageUri,
         thumbnailUri: savedThumbnailUri,
       };
 
-      setPendingImages(prev => [...prev, newImage]);
+      setPendingImages([newImage]);
       setCurrentImageIndex(0);
-      setShowCategoryModal(true);
     } catch (error) {
       console.error('Failed to add photo:', error);
       Alert.alert('错误', '添加照片失败，请重试');
@@ -105,90 +107,71 @@ export default function WardrobeScreen() {
     }
   };
 
-  const handleSelectCategory = (category: ClothingCategory) => {
-    const newPendingImages = [...pendingImages];
-    newPendingImages[currentImageIndex].category = category;
-    setPendingImages(newPendingImages);
+  const handleSelectCategory = async (category: ClothingCategory) => {
+    if (!currentImage) return;
 
-    if (currentImageIndex < pendingImages.length - 1) {
-      setCurrentImageIndex(currentImageIndex + 1);
-    } else {
-      // 所有图片都分类完成，开始保存
-      handleSaveAllItems();
-    }
-  };
+    // 更新当前图片的分类
+    const updatedImages = [...pendingImages];
+    updatedImages[currentImageIndex].category = category;
+    setPendingImages(updatedImages);
 
-  const handleSkipCategory = () => {
-    if (currentImageIndex < pendingImages.length - 1) {
-      setCurrentImageIndex(currentImageIndex + 1);
-    } else {
-      handleSaveAllItems();
-    }
-  };
-
-  const handleSaveAllItems = async () => {
-    setShowCategoryModal(false);
-    setIsProcessing(true);
-
+    // 保存这一项
     try {
-      let successCount = 0;
-      const failedItems: string[] = [];
+      const newItem = {
+        id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        imageUri: currentImage.imageUri,
+        thumbnailUri: currentImage.thumbnailUri,
+        category,
+        addedAt: Date.now(),
+      };
 
-      for (const pendingImage of pendingImages) {
-        if (!pendingImage.category) {
-          failedItems.push('未分类的衣物');
-          continue;
-        }
-
-        try {
-          const newItem = {
-            id: `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            imageUri: pendingImage.imageUri,
-            thumbnailUri: pendingImage.thumbnailUri,
-            category: pendingImage.category,
-            addedAt: Date.now(),
-          };
-
-          await addClothingItem(newItem);
-          successCount++;
-        } catch (error) {
-          console.error('Failed to save item:', error);
-          failedItems.push(pendingImage.category ? CATEGORY_LABELS[pendingImage.category] : '未知');
-        }
-      }
-
-      // 清空待处理列表
-      setPendingImages([]);
-      setCurrentImageIndex(0);
-
+      await addClothingItem(newItem);
+      
       if (Platform.OS !== 'web') {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
 
-      if (successCount > 0) {
-        Alert.alert(
-          '成功',
-          `已添加 ${successCount} 件衣物到衣橱${failedItems.length > 0 ? `\n失败: ${failedItems.join(', ')}` : ''}`
-        );
+      // 移除已保存的图片
+      const remaining = updatedImages.filter((_, idx) => idx !== currentImageIndex);
+      
+      if (remaining.length > 0) {
+        // 还有更多图片，继续分类
+        setPendingImages(remaining);
+        setCurrentImageIndex(0);
       } else {
-        Alert.alert('错误', '添加衣物失败，请重试');
+        // 所有图片都已保存
+        setPendingImages([]);
+        setCurrentImageIndex(0);
+        Alert.alert('成功', '衣物已添加到衣橱');
       }
     } catch (error) {
-      console.error('Failed to save items:', error);
+      console.error('Failed to save item:', error);
       Alert.alert('错误', '保存失败，请重试');
-    } finally {
-      setIsProcessing(false);
     }
   };
 
-  const handleCancelCategoryPicker = async () => {
-    setShowCategoryModal(false);
+  const handleSkipImage = () => {
+    if (!currentImage) return;
+
+    // 删除当前图片
+    const remaining = pendingImages.filter((_, idx) => idx !== currentImageIndex);
     
-    // 删除所有未分类的图片
-    for (const pendingImage of pendingImages) {
+    if (remaining.length > 0) {
+      setPendingImages(remaining);
+      setCurrentImageIndex(0);
+    } else {
+      setPendingImages([]);
+      setCurrentImageIndex(0);
+      Alert.alert('已跳过', '所有图片已处理');
+    }
+  };
+
+  const handleCancelAll = async () => {
+    // 删除所有未处理的图片
+    for (const image of pendingImages) {
       try {
-        await deleteImage(pendingImage.imageUri);
-        await deleteImage(pendingImage.thumbnailUri);
+        await deleteImage(image.imageUri);
+        await deleteImage(image.thumbnailUri);
       } catch (error) {
         console.error('Failed to delete image:', error);
       }
@@ -197,8 +180,6 @@ export default function WardrobeScreen() {
     setPendingImages([]);
     setCurrentImageIndex(0);
   };
-
-  const currentPendingImage = pendingImages[currentImageIndex];
 
   if (isLoading) {
     return (
@@ -288,10 +269,10 @@ export default function WardrobeScreen() {
 
       {/* 分类选择弹窗 */}
       <Modal
-        visible={showCategoryModal}
+        visible={showModal}
         transparent
         animationType="fade"
-        onRequestClose={handleCancelCategoryPicker}
+        onRequestClose={handleCancelAll}
       >
         <Pressable
           style={{
@@ -301,7 +282,7 @@ export default function WardrobeScreen() {
             alignItems: 'center',
             padding: 20,
           }}
-          onPress={handleCancelCategoryPicker}
+          onPress={handleCancelAll}
         >
           <Pressable
             style={{
@@ -313,60 +294,64 @@ export default function WardrobeScreen() {
             }}
             onPress={(e) => e.stopPropagation()}
           >
-            {currentPendingImage && (
+            {currentImage && (
               <View>
-                <Text className="text-xl font-bold text-foreground mb-4">
-                  选择分类 ({currentImageIndex + 1}/{pendingImages.length})
+                <Text className="text-xl font-bold text-foreground mb-2">
+                  选择分类
+                </Text>
+                <Text className="text-sm text-muted mb-4">
+                  还有 {pendingImages.length} 件衣物待分类
                 </Text>
 
                 <Image
-                  source={{ uri: currentPendingImage.thumbnailUri }}
+                  source={{ uri: currentImage.thumbnailUri }}
                   style={{ 
                     width: '100%', 
                     aspectRatio: 1,
                     borderRadius: 12,
-                    marginBottom: 20,
+                    marginBottom: 16,
                   }}
                   contentFit="cover"
                 />
 
-                <Text className="text-sm text-muted mb-4 text-center">
+                <Text className="text-sm text-muted mb-3 text-center">
                   这件衣物属于哪个分类？
                 </Text>
 
-                <View style={{ maxHeight: 300 }}>
-                  <ScrollView showsVerticalScrollIndicator={false}>
-                    {CATEGORY_ORDER.map(category => (
-                      <Pressable
-                        key={category}
-                        onPress={() => handleSelectCategory(category)}
-                        style={({ pressed }) => [
-                          {
-                            backgroundColor: colors.background,
-                            paddingVertical: 14,
-                            paddingHorizontal: 16,
-                            borderRadius: 12,
-                            marginBottom: 8,
-                            opacity: pressed ? 0.7 : 1,
-                          }
-                        ]}
-                      >
-                        <Text className="text-foreground font-medium text-center">
-                          {CATEGORY_LABELS[category]}
-                        </Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                </View>
+                <ScrollView 
+                  style={{ maxHeight: 240, marginBottom: 16 }}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {CATEGORY_ORDER.map(category => (
+                    <Pressable
+                      key={category}
+                      onPress={() => handleSelectCategory(category)}
+                      style={({ pressed }) => [
+                        {
+                          backgroundColor: colors.background,
+                          paddingVertical: 12,
+                          paddingHorizontal: 16,
+                          borderRadius: 12,
+                          marginBottom: 8,
+                          opacity: pressed ? 0.7 : 1,
+                        }
+                      ]}
+                    >
+                      <Text className="text-foreground font-medium text-center">
+                        {CATEGORY_LABELS[category]}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
 
-                <View className="flex-row gap-3 mt-6">
+                <View className="flex-row gap-3">
                   <Pressable
-                    onPress={handleCancelCategoryPicker}
+                    onPress={handleCancelAll}
                     style={({ pressed }) => [
                       {
                         flex: 1,
                         backgroundColor: colors.error,
-                        paddingVertical: 14,
+                        paddingVertical: 12,
                         borderRadius: 12,
                         alignItems: 'center',
                         opacity: pressed ? 0.7 : 1,
@@ -374,17 +359,17 @@ export default function WardrobeScreen() {
                     ]}
                   >
                     <Text className="font-medium" style={{ color: '#fff' }}>
-                      取消
+                      取消全部
                     </Text>
                   </Pressable>
 
                   <Pressable
-                    onPress={handleSkipCategory}
+                    onPress={handleSkipImage}
                     style={({ pressed }) => [
                       {
                         flex: 1,
                         backgroundColor: colors.muted,
-                        paddingVertical: 14,
+                        paddingVertical: 12,
                         borderRadius: 12,
                         alignItems: 'center',
                         opacity: pressed ? 0.7 : 1,
@@ -392,7 +377,7 @@ export default function WardrobeScreen() {
                     ]}
                   >
                     <Text className="font-medium text-background">
-                      跳过
+                      跳过此件
                     </Text>
                   </Pressable>
                 </View>
