@@ -71,38 +71,72 @@ export async function pickImageFromLibrary(): Promise<string | null> {
 }
 
 /**
- * 从相册选择多张图片
+ * 从相册选择多张图片（web环境使用原生HTML input）
  */
 export async function pickMultipleImagesFromLibrary(): Promise<string[]> {
   try {
-    const hasPermission = await requestMediaLibraryPermission();
-    if (!hasPermission && Platform.OS !== 'web') {
-      console.warn('Media library permission denied');
-      return [];
+    console.log('Platform:', Platform.OS);
+    
+    if (Platform.OS === 'web') {
+      // 在web环境中使用HTML文件输入
+      return new Promise((resolve) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.multiple = true;
+        input.accept = 'image/*';
+
+        input.onchange = async (e: any) => {
+          const files = e.target.files;
+          if (!files || files.length === 0) {
+            console.log('No files selected');
+            resolve([]);
+            return;
+          }
+
+          const uris: string[] = [];
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const uri = URL.createObjectURL(file);
+            uris.push(uri);
+            console.log(`File ${i + 1}: ${file.name}`);
+          }
+
+          console.log('Selected files:', uris.length);
+          resolve(uris);
+        };
+
+        input.click();
+      });
+    } else {
+      // 在原生平台上使用 expo-image-picker
+      const hasPermission = await requestMediaLibraryPermission();
+      if (!hasPermission) {
+        console.warn('Media library permission denied');
+        return [];
+      }
+
+      console.log('Launching image library picker (multiple)...');
+      const result = await (ImagePicker.launchImageLibraryAsync as any)({
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        quality: 1,
+        allowsMultiple: true,
+      });
+
+      console.log('Image picker result:', {
+        canceled: result.canceled,
+        assetsCount: result.assets?.length,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) {
+        console.log('Image selection was canceled or no assets returned');
+        return [];
+      }
+
+      const uris = result.assets.map((asset: any) => asset.uri);
+      console.log('Selected image URIs:', uris);
+      return uris;
     }
-
-    console.log('Launching image library picker (multiple)...');
-    // 使用 as any 来绕过 TypeScript 类型检查，因为 allowsMultiple 在某些版本中可能不被识别
-    const result = await (ImagePicker.launchImageLibraryAsync as any)({
-      mediaTypes: ['images'],
-      allowsEditing: false,
-      quality: 1,
-      allowsMultiple: true,
-    });
-
-    console.log('Image picker result:', {
-      canceled: result.canceled,
-      assetsCount: result.assets?.length,
-    });
-
-    if (result.canceled || !result.assets || result.assets.length === 0) {
-      console.log('Image selection was canceled or no assets returned');
-      return [];
-    }
-
-    const uris = result.assets.map((asset: any) => asset.uri);
-    console.log('Selected image URIs:', uris);
-    return uris;
   } catch (error) {
     console.error('Error in pickMultipleImagesFromLibrary:', error);
     return [];

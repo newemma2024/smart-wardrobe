@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { View, Text, ScrollView, Pressable, FlatList, Alert, ActivityIndicator, Modal } from "react-native";
+import { View, Text, ScrollView, Pressable, FlatList, Alert, ActivityIndicator, Modal, Dimensions } from "react-native";
 import { Image } from "expo-image";
 import * as Haptics from "expo-haptics";
 
@@ -15,6 +15,8 @@ interface PendingImage {
   imageUri: string;
   thumbnailUri: string;
 }
+
+const SIDEBAR_WIDTH = 100;
 
 export default function WardrobeScreen() {
   const colors = useColors();
@@ -266,24 +268,40 @@ export default function WardrobeScreen() {
   }
 
   return (
-    <ScreenContainer className="flex-1">
-      {/* 分类标签栏 */}
-      <View className="border-b border-border">
+    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: colors.background }}>
+      {/* 左侧分类菜单 */}
+      <View 
+        style={{ 
+          width: SIDEBAR_WIDTH, 
+          backgroundColor: colors.surface,
+          borderRightColor: colors.border,
+          borderRightWidth: 1,
+        }}
+      >
         <ScrollView 
-          horizontal 
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingVertical: 12 }}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingVertical: 12 }}
         >
           <Pressable
             onPress={() => handleCategoryPress('all')}
-            style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-            className={`px-4 py-2 rounded-full mr-2 ${
-              selectedCategory === 'all' ? 'bg-primary' : 'bg-surface'
-            }`}
+            style={({ pressed }) => [
+              {
+                paddingVertical: 12,
+                paddingHorizontal: 8,
+                opacity: pressed ? 0.7 : 1,
+                backgroundColor: selectedCategory === 'all' ? colors.primary : 'transparent',
+              }
+            ]}
           >
-            <Text className={`font-medium ${
-              selectedCategory === 'all' ? 'text-background' : 'text-foreground'
-            }`}>
+            <Text 
+              style={{ 
+                fontSize: 11, 
+                fontWeight: '500',
+                color: selectedCategory === 'all' ? '#fff' : colors.foreground,
+                textAlign: 'center',
+              }}
+              numberOfLines={2}
+            >
               全部
             </Text>
           </Pressable>
@@ -292,14 +310,24 @@ export default function WardrobeScreen() {
             <Pressable
               key={category}
               onPress={() => handleCategoryPress(category)}
-              style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
-              className={`px-4 py-2 rounded-full mr-2 ${
-                selectedCategory === category ? 'bg-primary' : 'bg-surface'
-              }`}
+              style={({ pressed }) => [
+                {
+                  paddingVertical: 12,
+                  paddingHorizontal: 8,
+                  opacity: pressed ? 0.7 : 1,
+                  backgroundColor: selectedCategory === category ? colors.primary : 'transparent',
+                }
+              ]}
             >
-              <Text className={`font-medium ${
-                selectedCategory === category ? 'text-background' : 'text-foreground'
-              }`}>
+              <Text 
+                style={{ 
+                  fontSize: 11, 
+                  fontWeight: '500',
+                  color: selectedCategory === category ? '#fff' : colors.foreground,
+                  textAlign: 'center',
+                }}
+                numberOfLines={2}
+              >
                 {CATEGORY_LABELS[category]}
               </Text>
             </Pressable>
@@ -307,192 +335,195 @@ export default function WardrobeScreen() {
         </ScrollView>
       </View>
 
-      {/* 衣物网格 */}
-      {filteredItems.length === 0 ? (
-        <View className="flex-1 items-center justify-center p-8">
-          <Text className="text-lg text-muted text-center mb-2">
-            {selectedCategory === 'all' ? '衣橱里还没有衣物' : `还没有${CATEGORY_LABELS[selectedCategory as ClothingCategory]}`}
-          </Text>
-          <Text className="text-sm text-muted text-center">
-            点击右下角按钮添加照片
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredItems}
-          keyExtractor={item => item.id}
-          numColumns={2}
-          contentContainerStyle={{ padding: 16 }}
-          columnWrapperStyle={{ gap: 16 }}
-          renderItem={({ item }) => (
-            <View
-              className="bg-surface rounded-2xl overflow-hidden mb-4 flex-1"
-            >
-              <Image
-                source={{ uri: item.thumbnailUri }}
-                style={{ width: '100%', aspectRatio: 1 }}
-                contentFit="cover"
-              />
-              <View className="p-2">
-                <Text className="text-xs text-muted text-center">
-                  {CATEGORY_LABELS[item.category]}
-                </Text>
+      {/* 右侧内容区域 */}
+      <View style={{ flex: 1 }}>
+        {/* 衣物网格 */}
+        {filteredItems.length === 0 ? (
+          <View className="flex-1 items-center justify-center p-8">
+            <Text className="text-lg text-muted text-center mb-2">
+              {selectedCategory === 'all' ? '衣橱里还没有衣物' : `还没有${CATEGORY_LABELS[selectedCategory as ClothingCategory]}`}
+            </Text>
+            <Text className="text-sm text-muted text-center">
+              点击右下角按钮添加照片
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={filteredItems}
+            keyExtractor={item => item.id}
+            numColumns={2}
+            contentContainerStyle={{ padding: 16 }}
+            columnWrapperStyle={{ gap: 16 }}
+            renderItem={({ item }) => (
+              <View
+                className="bg-surface rounded-2xl overflow-hidden mb-4 flex-1"
+              >
+                <Image
+                  source={{ uri: item.thumbnailUri }}
+                  style={{ width: '100%', aspectRatio: 1 }}
+                  contentFit="cover"
+                />
+                <View className="p-2">
+                  <Text className="text-xs text-muted text-center">
+                    {CATEGORY_LABELS[item.category]}
+                  </Text>
+                </View>
               </View>
-            </View>
-          )}
-        />
-      )}
+            )}
+          />
+        )}
 
-      {/* 分类选择弹窗 */}
-      <Modal
-        visible={showCategoryModal && pendingImages.length > 0}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCancelAll}
-      >
-        <Pressable
-          style={{
-            flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.7)',
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 20,
-          }}
-          onPress={handleCancelAll}
+        {/* 分类选择弹窗 */}
+        <Modal
+          visible={showCategoryModal && pendingImages.length > 0}
+          transparent
+          animationType="fade"
+          onRequestClose={handleCancelAll}
         >
           <Pressable
             style={{
-              backgroundColor: colors.surface,
-              borderRadius: 24,
-              padding: 24,
-              width: '100%',
-              maxWidth: 400,
+              flex: 1,
+              backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              justifyContent: 'center',
+              alignItems: 'center',
+              padding: 20,
             }}
-            onPress={(e) => e.stopPropagation()}
+            onPress={handleCancelAll}
           >
-            <Text className="text-xl font-bold text-foreground mb-2">
-              选择分类
-            </Text>
-            <Text className="text-sm text-muted mb-4">
-              为 {pendingImages.length} 件衣物选择分类
-            </Text>
-
-            {/* 显示缩略图预览 */}
-            <ScrollView 
-              horizontal 
-              showsHorizontalScrollIndicator={false}
-              style={{ marginBottom: 16 }}
-            >
-              {pendingImages.slice(0, 5).map((image, idx) => (
-                <Image
-                  key={image.id}
-                  source={{ uri: image.thumbnailUri }}
-                  style={{ 
-                    width: 60, 
-                    height: 60,
-                    borderRadius: 8,
-                    marginRight: 8,
-                  }}
-                  contentFit="cover"
-                />
-              ))}
-              {pendingImages.length > 5 && (
-                <View
-                  style={{
-                    width: 60,
-                    height: 60,
-                    borderRadius: 8,
-                    backgroundColor: colors.muted,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text className="text-white font-bold">+{pendingImages.length - 5}</Text>
-                </View>
-              )}
-            </ScrollView>
-
-            <Text className="text-sm text-muted mb-3 text-center">
-              为这些衣物选择分类
-            </Text>
-
-            <ScrollView 
-              style={{ maxHeight: 240, marginBottom: 16 }}
-              showsVerticalScrollIndicator={false}
-            >
-              {CATEGORY_ORDER.map(category => (
-                <Pressable
-                  key={category}
-                  onPress={() => handleSelectCategory(category)}
-                  style={({ pressed }) => [
-                    {
-                      backgroundColor: colors.background,
-                      paddingVertical: 12,
-                      paddingHorizontal: 16,
-                      borderRadius: 12,
-                      marginBottom: 8,
-                      opacity: pressed ? 0.7 : 1,
-                    }
-                  ]}
-                >
-                  <Text className="text-foreground font-medium text-center">
-                    {CATEGORY_LABELS[category]}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
             <Pressable
-              onPress={handleCancelAll}
-              style={({ pressed }) => [
-                {
-                  backgroundColor: colors.error,
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  alignItems: 'center',
-                  opacity: pressed ? 0.7 : 1,
-                }
-              ]}
+              style={{
+                backgroundColor: colors.surface,
+                borderRadius: 24,
+                padding: 24,
+                width: '100%',
+                maxWidth: 400,
+              }}
+              onPress={(e) => e.stopPropagation()}
             >
-              <Text className="font-medium" style={{ color: '#fff' }}>
-                取消
+              <Text className="text-xl font-bold text-foreground mb-2">
+                选择分类
               </Text>
+              <Text className="text-sm text-muted mb-4">
+                为 {pendingImages.length} 件衣物选择分类
+              </Text>
+
+              {/* 显示缩略图预览 */}
+              <ScrollView 
+                horizontal 
+                showsHorizontalScrollIndicator={false}
+                style={{ marginBottom: 16 }}
+              >
+                {pendingImages.slice(0, 5).map((image, idx) => (
+                  <Image
+                    key={image.id}
+                    source={{ uri: image.thumbnailUri }}
+                    style={{ 
+                      width: 60, 
+                      height: 60,
+                      borderRadius: 8,
+                      marginRight: 8,
+                    }}
+                    contentFit="cover"
+                  />
+                ))}
+                {pendingImages.length > 5 && (
+                  <View
+                    style={{
+                      width: 60,
+                      height: 60,
+                      borderRadius: 8,
+                      backgroundColor: colors.muted,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text className="text-white font-bold">+{pendingImages.length - 5}</Text>
+                  </View>
+                )}
+              </ScrollView>
+
+              <Text className="text-sm text-muted mb-3 text-center">
+                为这些衣物选择分类
+              </Text>
+
+              <ScrollView 
+                style={{ maxHeight: 240, marginBottom: 16 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {CATEGORY_ORDER.map(category => (
+                  <Pressable
+                    key={category}
+                    onPress={() => handleSelectCategory(category)}
+                    style={({ pressed }) => [
+                      {
+                        backgroundColor: colors.background,
+                        paddingVertical: 12,
+                        paddingHorizontal: 16,
+                        borderRadius: 12,
+                        marginBottom: 8,
+                        opacity: pressed ? 0.7 : 1,
+                      }
+                    ]}
+                  >
+                    <Text className="text-foreground font-medium text-center">
+                      {CATEGORY_LABELS[category]}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+
+              <Pressable
+                onPress={handleCancelAll}
+                style={({ pressed }) => [
+                  {
+                    backgroundColor: colors.error,
+                    paddingVertical: 12,
+                    borderRadius: 12,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.7 : 1,
+                  }
+                ]}
+              >
+                <Text className="font-medium" style={{ color: '#fff' }}>
+                  取消
+                </Text>
+              </Pressable>
             </Pressable>
           </Pressable>
-        </Pressable>
-      </Modal>
+        </Modal>
 
-      {/* 添加按钮 */}
-      <Pressable
-        onPress={handleAddPhoto}
-        disabled={isProcessing || pendingImages.length > 0}
-        style={({ pressed }) => [
-          {
-            position: 'absolute',
-            right: 20,
-            bottom: 20,
-            width: 60,
-            height: 60,
-            borderRadius: 30,
-            backgroundColor: colors.primary,
-            justifyContent: 'center',
-            alignItems: 'center',
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 8,
-            elevation: 8,
-            transform: [{ scale: pressed ? 0.95 : 1 }],
-            opacity: (isProcessing || pendingImages.length > 0) ? 0.5 : 1,
-          }
-        ]}
-      >
-        {isProcessing ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={{ color: '#fff', fontSize: 32, fontWeight: '300' }}>+</Text>
-        )}
-      </Pressable>
-    </ScreenContainer>
+        {/* 添加按钮 */}
+        <Pressable
+          onPress={handleAddPhoto}
+          disabled={isProcessing || pendingImages.length > 0}
+          style={({ pressed }) => [
+            {
+              position: 'absolute',
+              right: 20,
+              bottom: 20,
+              width: 60,
+              height: 60,
+              borderRadius: 30,
+              backgroundColor: colors.primary,
+              justifyContent: 'center',
+              alignItems: 'center',
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 4 },
+              shadowOpacity: 0.3,
+              shadowRadius: 8,
+              elevation: 8,
+              transform: [{ scale: pressed ? 0.95 : 1 }],
+              opacity: (isProcessing || pendingImages.length > 0) ? 0.5 : 1,
+            }
+          ]}
+        >
+          {isProcessing ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={{ color: '#fff', fontSize: 32, fontWeight: '300' }}>+</Text>
+          )}
+        </Pressable>
+      </View>
+    </View>
   );
 }
