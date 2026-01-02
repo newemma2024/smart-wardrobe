@@ -1,16 +1,36 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import * as DocumentPicker from 'expo-document-picker';
 import { Platform } from 'react-native';
 import { ClothingCategory, CATEGORY_LABELS } from '@/types/wardrobe';
 
 /**
- * 获取文档目录
+ * 让用户选择一个文件夹
  */
-export async function getDocumentDirectory(): Promise<string> {
-  if (Platform.OS === 'web') {
-    // Web环境下无法访问文件系统
-    return '';
+export async function selectFolderByUser(): Promise<string | null> {
+  try {
+    if (Platform.OS === 'web') {
+      console.warn('Web platform does not support folder selection');
+      return null;
+    }
+
+    // 使用DocumentPicker选择文件夹
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'application/x-directory',
+      copyToCacheDirectory: false,
+    });
+
+    if (result && 'uri' in result) {
+      // 获取文件夹URI
+      const folderUri = result.uri as string;
+      console.log('Selected folder:', folderUri);
+      return folderUri;
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Failed to select folder:', error);
+    return null;
   }
-  return FileSystem.documentDirectory || '';
 }
 
 /**
@@ -26,7 +46,8 @@ export async function createCategoryFolders(baseFolder: string): Promise<boolean
     // 确保基础文件夹存在
     const baseInfo = await FileSystem.getInfoAsync(baseFolder);
     if (!baseInfo.exists) {
-      await FileSystem.makeDirectoryAsync(baseFolder, { intermediates: true });
+      console.warn('Base folder does not exist:', baseFolder);
+      return false;
     }
 
     // 为每个分类创建子文件夹
@@ -111,33 +132,5 @@ export async function getImageStats(folderPath: string): Promise<{ category: str
   } catch (error) {
     console.error('Failed to get image stats:', error);
     return [];
-  }
-}
-
-/**
- * 选择文件夹（原生平台）
- */
-export async function selectFolder(): Promise<string | null> {
-  try {
-    if (Platform.OS === 'web') {
-      console.warn('Web platform does not support folder selection');
-      return null;
-    }
-
-    // 对于原生平台，返回文档目录中的wardrobe文件夹
-    const docDir = await getDocumentDirectory();
-    if (!docDir) return null;
-
-    const wardrobeFolder = `${docDir}smart-wardrobe-import/`;
-    const folderInfo = await FileSystem.getInfoAsync(wardrobeFolder);
-    
-    if (!folderInfo.exists) {
-      await FileSystem.makeDirectoryAsync(wardrobeFolder, { intermediates: true });
-    }
-
-    return wardrobeFolder;
-  } catch (error) {
-    console.error('Failed to select folder:', error);
-    return null;
   }
 }

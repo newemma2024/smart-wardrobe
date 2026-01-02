@@ -7,7 +7,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { useWardrobe } from "@/lib/wardrobe-provider";
 import { useColors } from "@/hooks/use-colors";
 import { Platform } from "react-native";
-import { createCategoryFolders, scanImagesInFolder, getImageStats, selectFolder } from "@/lib/folder-manager";
+import { createCategoryFolders, scanImagesInFolder, getImageStats, selectFolderByUser } from '@/lib/folder-manager';
 import { CATEGORY_LABELS, CATEGORY_ORDER, ClothingCategory } from "@/types/wardrobe";
 import { compressImage, generateThumbnail, saveImageToAppDirectory } from "@/lib/image-utils";
 
@@ -25,19 +25,7 @@ export default function ImportScreen() {
   }, []);
 
   const checkFolderStructure = async () => {
-    if (Platform.OS === 'web') return;
-
-    try {
-      const folder = await selectFolder();
-      if (folder) {
-        setSelectedFolder(folder);
-        const stats = await getImageStats(folder);
-        setImageStats(stats);
-        setFolderStructureCreated(true);
-      }
-    } catch (error) {
-      console.error('Failed to check folder structure:', error);
-    }
+    // 初始化时不自动选择文件夹
   };
 
   const handleCreateFolderStructure = async () => {
@@ -48,9 +36,9 @@ export default function ImportScreen() {
 
     setIsLoading(true);
     try {
-      const folder = await selectFolder();
+      const folder = await selectFolderByUser();
       if (!folder) {
-        Alert.alert('错误', '无法选择文件夹');
+        Alert.alert('提示', '未选择文件夹');
         setIsLoading(false);
         return;
       }
