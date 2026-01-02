@@ -1,0 +1,28 @@
+修正されたファイル一覧
+==================
+
+## コアファイル
+1. lib/folder-manager.ts - フォルダ管理ロジックの修正
+2. app/(tabs)/import.tsx - インポート画面のUI修正
+
+## 依存関係
+3. package.json - expo-clipboardパッケージの追加
+4. pnpm-lock.yaml - 依存関係のロックファイル更新
+
+## ドキュメント（新規作成）
+5. CHANGES_SUMMARY.md - 修正内容の詳細サマリー
+6. MODIFICATION_PLAN.md - 修正計画と分析
+7. USAGE_GUIDE_JP.md - 日本語使用ガイド
+8. USAGE_GUIDE_CN.md - 中国語使用ガイド
+9. MODIFIED_FILES.txt - このファイル
+
+## 主な変更点
+- ユーザーにフォルダ選択を求める機能を削除
+- アプリが自動的に専用フォルダを作成
+- フォルダパスのコピー機能を追加
+- インポート後の元ファイル削除オプションを追加
+- UIの改善と説明の追加
+
+## テスト状況
+✅ TypeScript型チェック: 合格
+⚠️ 実機テスト: 未実施（iOS/Androidデバイスが必要）

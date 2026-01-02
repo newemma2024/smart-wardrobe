@@ -1,88 +1,86 @@
 import { useState, useEffect } from "react";
-import { View, Text, ScrollView, Pressable, Alert, ActivityIndicator } from "react-native";
-import * as FileSystem from 'expo-file-system/legacy';
+import { View, Text, ScrollView, Pressable, Alert, ActivityIndicator, Share } from "react-native";
 import * as Haptics from "expo-haptics";
+import * as Clipboard from 'expo-clipboard';
 
 import { ScreenContainer } from "@/components/screen-container";
 import { useWardrobe } from "@/lib/wardrobe-provider";
 import { useColors } from "@/hooks/use-colors";
 import { Platform } from "react-native";
-import { createCategoryFolders, scanImagesInFolder, getImageStats, selectFolderByUser } from '@/lib/folder-manager';
+import { initializeCategoryFolders, scanImagesInFolder, getImageStats, getWardrobeImportFolder, deleteImportedImage } from '@/lib/folder-manager';
 import { CATEGORY_LABELS, CATEGORY_ORDER, ClothingCategory } from "@/types/wardrobe";
 import { compressImage, generateThumbnail, saveImageToAppDirectory } from "@/lib/image-utils";
 
 export default function ImportScreen() {
   const colors = useColors();
   const { addClothingItem } = useWardrobe();
-  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
+  const [importFolder, setImportFolder] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [imageStats, setImageStats] = useState<{ category: string; count: number }[]>([]);
-  const [folderStructureCreated, setFolderStructureCreated] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [deleteAfterImport, setDeleteAfterImport] = useState(false);
 
   useEffect(() => {
-    // 初始化时检查是否已创建文件夹结构
-    checkFolderStructure();
+    // 初始化文件夹结构
+    initializeFolders();
   }, []);
 
-  const checkFolderStructure = async () => {
-    // 初始化时不自动选择文件夹
-  };
-
-  const handleCreateFolderStructure = async () => {
-  if (Platform.OS !== 'ios' && Platform.OS !== 'android') {
-    Alert.alert('提示', '此功能仅支持iOS和Android设备');
-    return;
-  }
-
+  const initializeFolders = async () => {
     setIsLoading(true);
     try {
-      const folder = await selectFolderByUser();
-      if (!folder) {
-        Alert.alert('提示', '未选择文件夹');
-        setIsLoading(false);
-        return;
-      }
-
-      const success = await createCategoryFolders(folder);
-      if (success) {
-        setSelectedFolder(folder);
-        setFolderStructureCreated(true);
+      const folder = await initializeCategoryFolders();
+      if (folder) {
+        setImportFolder(folder);
+        setIsInitialized(true);
         
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-        Alert.alert(
-          '成功',
-          `文件夹结构已创建！\n\n文件夹位置：\n${folder}\n\n请将不同类型的衣物照片复制到对应的子文件夹中，然后点击"扫描导入"按钮。`
-        );
-      } else {
-        Alert.alert('错误', '创建文件夹失败');
+        // 自动刷新统计
+        const stats = await getImageStats();
+        setImageStats(stats);
       }
     } catch (error) {
-      console.error('Failed to create folder structure:', error);
-      Alert.alert('错误', '创建文件夹时出错');
+      console.error('Failed to initialize folders:', error);
+      Alert.alert('错误', '初始化文件夹失败');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleCopyPath = async () => {
+    if (!importFolder) return;
+    
+    try {
+      await Clipboard.setStringAsync(importFolder);
+      
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
+      
+      Alert.alert('成功', '文件夹路径已复制到剪贴板');
+    } catch (error) {
+      console.error('Failed to copy path:', error);
+      Alert.alert('错误', '复制路径失败');
+    }
+  };
+
   const handleScanAndImport = async () => {
-    if (!selectedFolder) {
-      Alert.alert('提示', '请先创建文件夹结构');
+    if (!importFolder) {
+      Alert.alert('提示', '文件夹未初始化');
       return;
     }
 
     setIsLoading(true);
     try {
-      const imageMap = await scanImagesInFolder(selectedFolder);
+      const imageMap = await scanImagesInFolder();
       
       if (imageMap.size === 0) {
-        Alert.alert('提示', '未找到任何图片');
+        Alert.alert('提示', '未找到任何图片\n\n请将图片复制到对应的分类文件夹中');
         setIsLoading(false);
         return;
       }
 
       let totalImported = 0;
       let totalFailed = 0;
+      const importedPaths: string[] = [];
 
       for (const [category, imagePaths] of imageMap) {
         for (const imagePath of imagePaths) {
@@ -108,6 +106,7 @@ export default function ImportScreen() {
 
             await addClothingItem(newItem);
             totalImported++;
+            importedPaths.push(imagePath);
           } catch (error) {
             console.error(`Failed to import image ${imagePath}:`, error);
             totalFailed++;
@@ -115,15 +114,24 @@ export default function ImportScreen() {
         }
       }
 
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // 如果设置了导入后删除，则删除已导入的图片
+      if (deleteAfterImport && importedPaths.length > 0) {
+        for (const path of importedPaths) {
+          await deleteImportedImage(path);
+        }
+      }
+
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
 
       Alert.alert(
         '导入完成',
-        `成功导入：${totalImported} 件\n失败：${totalFailed} 件`
+        `成功导入：${totalImported} 件\n失败：${totalFailed} 件${deleteAfterImport ? '\n已删除源文件' : ''}`
       );
 
       // 刷新统计信息
-      const stats = await getImageStats(selectedFolder);
+      const stats = await getImageStats();
       setImageStats(stats);
     } catch (error) {
       console.error('Failed to import images:', error);
@@ -134,13 +142,19 @@ export default function ImportScreen() {
   };
 
   const handleRefreshStats = async () => {
-    if (!selectedFolder) return;
+    if (!importFolder) return;
 
     setIsLoading(true);
     try {
-      const stats = await getImageStats(selectedFolder);
+      const stats = await getImageStats();
       setImageStats(stats);
-      Alert.alert('刷新完成', `找到 ${stats.reduce((sum, s) => sum + s.count, 0)} 张图片`);
+      
+      const totalCount = stats.reduce((sum, s) => sum + s.count, 0);
+      if (totalCount > 0) {
+        Alert.alert('刷新完成', `找到 ${totalCount} 张图片`);
+      } else {
+        Alert.alert('提示', '未找到任何图片\n\n请将图片复制到对应的分类文件夹中');
+      }
     } catch (error) {
       console.error('Failed to refresh stats:', error);
       Alert.alert('错误', '刷新失败');
@@ -176,122 +190,70 @@ export default function ImportScreen() {
             </Text>
           </View>
 
-          {/* 步骤1：创建文件夹结构 */}
-          <View className="bg-surface rounded-2xl p-4">
-            <View className="flex-row items-center mb-3">
-              <View 
-                style={{ 
-                  width: 32, 
-                  height: 32, 
-                  borderRadius: 16, 
-                  backgroundColor: colors.primary,
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: 'bold' }}>1</Text>
-              </View>
-              <Text className="text-lg font-semibold text-foreground ml-3">
-                创建文件夹结构
-              </Text>
-            </View>
-            <Text className="text-sm text-muted mb-4">
-              点击下方按钮创建衣物分类文件夹。应用会自动在您的设备上创建以下文件夹：
-            </Text>
-            
-            <View className="bg-background rounded-lg p-3 mb-4">
-              {CATEGORY_ORDER.map(category => (
-                <Text key={category} className="text-xs text-muted py-1">
-                  • {CATEGORY_LABELS[category]}
-                </Text>
-              ))}
-            </View>
-
-            <Pressable
-              onPress={handleCreateFolderStructure}
-              disabled={isLoading}
-              style={({ pressed }) => [
-                {
-                  backgroundColor: colors.primary,
-                  paddingVertical: 12,
-                  borderRadius: 12,
-                  alignItems: 'center',
-                  opacity: pressed ? 0.8 : 1,
-                }
-              ]}
-            >
-              {isLoading ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text className="font-semibold" style={{ color: '#fff' }}>
-                  {folderStructureCreated ? '重新创建文件夹' : '创建文件夹结构'}
-                </Text>
-              )}
-            </Pressable>
-
-            {selectedFolder && (
-              <View className="mt-3 p-2 bg-background rounded-lg">
-                <Text className="text-xs text-muted">
-                  文件夹位置：
-                </Text>
-                <Text className="text-xs text-foreground font-mono break-words">
-                  {selectedFolder}
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {/* 步骤2：复制照片 */}
-          {folderStructureCreated && (
+          {/* 文件夹信息 */}
+          {isInitialized && (
             <View className="bg-surface rounded-2xl p-4">
-              <View className="flex-row items-center mb-3">
-                <View 
-                  style={{ 
-                    width: 32, 
-                    height: 32, 
-                    borderRadius: 16, 
-                    backgroundColor: colors.primary,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>2</Text>
-                </View>
-                <Text className="text-lg font-semibold text-foreground ml-3">
-                  复制衣物照片
+              <Text className="text-sm font-semibold text-foreground mb-2">
+                导入文件夹路径：
+              </Text>
+              <View className="bg-background rounded-lg p-3 mb-3">
+                <Text className="text-xs text-foreground font-mono" selectable>
+                  {importFolder}
                 </Text>
               </View>
-              <Text className="text-sm text-muted">
-                使用文件管理器将不同类型的衣物照片复制到对应的文件夹中。
+              
+              <Text className="text-xs text-muted mb-3">
+                请使用电脑通过USB连接设备，或使用文件管理器将衣物照片复制到上述文件夹的对应分类子文件夹中。
               </Text>
+
+              <Pressable
+                onPress={handleCopyPath}
+                style={({ pressed }) => [
+                  {
+                    backgroundColor: colors.border,
+                    paddingVertical: 8,
+                    paddingHorizontal: 12,
+                    borderRadius: 8,
+                    alignItems: 'center',
+                    opacity: pressed ? 0.7 : 1,
+                  }
+                ]}
+              >
+                <Text className="text-xs font-semibold text-foreground">
+                  复制路径
+                </Text>
+              </Pressable>
             </View>
           )}
 
-          {/* 步骤3：扫描导入 */}
-          {folderStructureCreated && (
+          {/* 文件夹结构说明 */}
+          {isInitialized && (
             <View className="bg-surface rounded-2xl p-4">
-              <View className="flex-row items-center mb-3">
-                <View 
-                  style={{ 
-                    width: 32, 
-                    height: 32, 
-                    borderRadius: 16, 
-                    backgroundColor: colors.primary,
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>3</Text>
-                </View>
-                <Text className="text-lg font-semibold text-foreground ml-3">
-                  扫描并导入
-                </Text>
+              <Text className="text-sm font-semibold text-foreground mb-3">
+                分类文件夹：
+              </Text>
+              
+              <View className="bg-background rounded-lg p-3">
+                {CATEGORY_ORDER.map(category => (
+                  <Text key={category} className="text-xs text-muted py-1">
+                    📁 {CATEGORY_LABELS[category]}
+                  </Text>
+                ))}
               </View>
+            </View>
+          )}
+
+          {/* 统计信息和操作 */}
+          {isInitialized && (
+            <View className="bg-surface rounded-2xl p-4">
+              <Text className="text-sm font-semibold text-foreground mb-3">
+                扫描并导入：
+              </Text>
 
               {imageStats.length > 0 && (
                 <View className="bg-background rounded-lg p-3 mb-4">
                   <Text className="text-xs font-semibold text-foreground mb-2">
-                    当前统计：
+                    待导入图片统计：
                   </Text>
                   {imageStats.map((stat, idx) => (
                     <View key={idx} className="flex-row justify-between py-1">
@@ -312,6 +274,44 @@ export default function ImportScreen() {
                 </View>
               )}
 
+              {/* 导入后删除选项 */}
+              <Pressable
+                onPress={() => setDeleteAfterImport(!deleteAfterImport)}
+                style={({ pressed }) => [
+                  {
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    paddingVertical: 12,
+                    paddingHorizontal: 12,
+                    backgroundColor: colors.background,
+                    borderRadius: 8,
+                    marginBottom: 12,
+                    opacity: pressed ? 0.7 : 1,
+                  }
+                ]}
+              >
+                <View 
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: 4,
+                    borderWidth: 2,
+                    borderColor: deleteAfterImport ? colors.primary : colors.border,
+                    backgroundColor: deleteAfterImport ? colors.primary : 'transparent',
+                    marginRight: 12,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                >
+                  {deleteAfterImport && (
+                    <Text style={{ color: '#fff', fontSize: 12, fontWeight: 'bold' }}>✓</Text>
+                  )}
+                </View>
+                <Text className="text-sm text-foreground">
+                  导入后删除源文件
+                </Text>
+              </Pressable>
+
               <View className="gap-3">
                 <Pressable
                   onPress={handleRefreshStats}
@@ -326,9 +326,13 @@ export default function ImportScreen() {
                     }
                   ]}
                 >
-                  <Text className="font-semibold text-foreground">
-                    刷新统计
-                  </Text>
+                  {isLoading ? (
+                    <ActivityIndicator color={colors.foreground} />
+                  ) : (
+                    <Text className="font-semibold text-foreground">
+                      刷新统计
+                    </Text>
+                  )}
                 </Pressable>
 
                 <Pressable
@@ -355,6 +359,21 @@ export default function ImportScreen() {
               </View>
             </View>
           )}
+
+          {/* 使用说明 */}
+          <View className="bg-surface rounded-2xl p-4">
+            <Text className="text-sm font-semibold text-foreground mb-2">
+              使用说明：
+            </Text>
+            <Text className="text-xs text-muted leading-5">
+              1. 应用已自动创建导入文件夹和分类子文件夹{'\n'}
+              2. 使用电脑通过USB连接手机，或使用文件管理器{'\n'}
+              3. 将衣物照片复制到对应的分类文件夹中{'\n'}
+              4. 点击"刷新统计"查看待导入的图片数量{'\n'}
+              5. 点击"开始导入"将图片导入到衣橱{'\n'}
+              6. 可选择导入后自动删除源文件以节省空间
+            </Text>
+          </View>
         </View>
       </ScrollView>
     </ScreenContainer>
