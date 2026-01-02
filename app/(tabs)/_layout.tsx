@@ -32,14 +32,21 @@ export default function TabLayout() {
         name="index"
         options={{
           title: "衣橱",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="tshirt" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="import"
+        options={{
+          title: "导入",
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
         }}
       />
       <Tabs.Screen
         name="outfits"
         options={{
           title: "搭配",
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="sparkles" color={color} />,
+          tabBarIcon: ({ color }) => <IconSymbol size={28} name="chevron.left.forwardslash.chevron.right" color={color} />,
         }}
       />
       <Tabs.Screen
