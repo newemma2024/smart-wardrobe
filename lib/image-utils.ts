@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { Platform } from 'react-native';
+import { getAppPrivateDirectory } from './file-access';
 
 const THUMBNAIL_SIZE = 300;
 const MAX_IMAGE_SIZE = 1200;
@@ -231,7 +232,7 @@ export async function saveImageToAppDirectory(uri: string, filename: string): Pr
       return uri;
     }
 
-    const directory = `${FileSystem.documentDirectory}wardrobe/`;
+    const directory = getAppPrivateDirectory();
     const dirInfo = await FileSystem.getInfoAsync(directory);
     
     if (!dirInfo.exists) {

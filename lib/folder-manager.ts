@@ -1,16 +1,19 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 import { ClothingCategory, CATEGORY_LABELS } from '@/types/wardrobe';
+import { 
+  getSmartWardrobeDownloadPath, 
+  initializeSmartWardrobeFolders,
+  scanImagesInSmartWardrobeFolder,
+  getSmartWardrobeImageStats
+} from './file-access';
 
 /**
  * 获取应用的衣物导入文件夹路径
+ * 使用 Download/smart-wardrobe 文件夹
  */
 export function getWardrobeImportFolder(): string {
-  if (Platform.OS === 'web') {
-    return '';
-  }
-  // 使用应用的文档目录
-  return `${FileSystem.documentDirectory}WardrobeImport`;
+  return getSmartWardrobeDownloadPath();
 }
 
 /**
@@ -18,39 +21,7 @@ export function getWardrobeImportFolder(): string {
  * 返回创建的文件夹路径
  */
 export async function initializeCategoryFolders(): Promise<string | null> {
-  try {
-    if (Platform.OS === 'web') {
-      console.warn('Web platform does not support folder operations');
-      return null;
-    }
-
-    const baseFolder = getWardrobeImportFolder();
-    
-    // 确保基础文件夹存在
-    const baseInfo = await FileSystem.getInfoAsync(baseFolder);
-    if (!baseInfo.exists) {
-      await FileSystem.makeDirectoryAsync(baseFolder, { intermediates: true });
-      console.log('Created base folder:', baseFolder);
-    }
-
-    // 为每个分类创建子文件夹
-    const categories: ClothingCategory[] = ['coat', 'jacket', 'top', 'pants', 'long-skirt', 'short-skirt', 'shoes', 'accessory'];
-    
-    for (const category of categories) {
-      const categoryFolder = `${baseFolder}/${CATEGORY_LABELS[category]}/`;
-      const folderInfo = await FileSystem.getInfoAsync(categoryFolder);
-      
-      if (!folderInfo.exists) {
-        await FileSystem.makeDirectoryAsync(categoryFolder, { intermediates: true });
-        console.log(`Created folder: ${categoryFolder}`);
-      }
-    }
-
-    return baseFolder;
-  } catch (error) {
-    console.error('Failed to initialize category folders:', error);
-    return null;
-  }
+  return await initializeSmartWardrobeFolders();
 }
 
 /**
@@ -63,34 +34,28 @@ export async function scanImagesInFolder(folderPath?: string): Promise<Map<Cloth
       return new Map();
     }
 
-    // 如果没有指定文件夹，使用默认的导入文件夹
-    const basePath = folderPath || getWardrobeImportFolder();
-
-    const result = new Map<ClothingCategory, string[]>();
-    const categories: ClothingCategory[] = ['coat', 'jacket', 'top', 'pants', 'long-skirt', 'short-skirt', 'shoes', 'accessory'];
+    // 使用新的扫描函数
+    const imageMap = await scanImagesInSmartWardrobeFolder();
     
-    for (const category of categories) {
-      const categoryFolder = `${basePath}/${CATEGORY_LABELS[category]}/`;
-      const folderInfo = await FileSystem.getInfoAsync(categoryFolder);
-      
-      if (folderInfo.exists && folderInfo.isDirectory) {
-        try {
-          const files = await FileSystem.readDirectoryAsync(categoryFolder);
-          const imageFiles = files.filter(file => {
-            const lower = file.toLowerCase();
-            return lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png') || lower.endsWith('.gif');
-          });
-          
-          if (imageFiles.length > 0) {
-            const imagePaths = imageFiles.map(file => `${categoryFolder}${file}`);
-            result.set(category, imagePaths);
-            console.log(`Found ${imageFiles.length} images in ${CATEGORY_LABELS[category]}`);
-          }
-        } catch (error) {
-          console.error(`Failed to read folder ${categoryFolder}:`, error);
-        }
+    // 转换分类名称为 ClothingCategory 类型
+    const result = new Map<ClothingCategory, string[]>();
+    const categoryMapping: { [key: string]: ClothingCategory } = {
+      '外套': 'coat',
+      '夹克': 'jacket',
+      '上衣': 'top',
+      '裤子': 'pants',
+      '长裙': 'long-skirt',
+      '短裙': 'short-skirt',
+      '鞋子': 'shoes',
+      '配饰': 'accessory',
+    };
+
+    imageMap.forEach((images, categoryLabel) => {
+      const category = categoryMapping[categoryLabel];
+      if (category) {
+        result.set(category, images);
       }
-    }
+    });
 
     return result;
   } catch (error) {
@@ -104,17 +69,7 @@ export async function scanImagesInFolder(folderPath?: string): Promise<Map<Cloth
  */
 export async function getImageStats(folderPath?: string): Promise<{ category: string; count: number }[]> {
   try {
-    const imageMap = await scanImagesInFolder(folderPath);
-    const stats: { category: string; count: number }[] = [];
-
-    imageMap.forEach((images, category) => {
-      stats.push({
-        category: CATEGORY_LABELS[category],
-        count: images.length,
-      });
-    });
-
-    return stats;
+    return await getSmartWardrobeImageStats();
   } catch (error) {
     console.error('Failed to get image stats:', error);
     return [];
