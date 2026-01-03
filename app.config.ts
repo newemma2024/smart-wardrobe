@@ -3,20 +3,17 @@ import "./scripts/load-env.js";
 import type { ExpoConfig } from "expo/config";
 
 // Bundle ID format: space.manus.<project_name_dots>.<timestamp>
-// e.g., "my-app" created at 2024-01-15 10:30:45 -> "space.manus.my.app.t20240115103045"
 const bundleId = "space.manus.smart.wardrobe.t20260101181526";
+
 // Extract timestamp from bundle ID and prefix with "manus" for deep link scheme
-// e.g., "space.manus.my.app.t20240115103045" -> "manus20240115103045"
 const timestamp = bundleId.split(".").pop()?.replace(/^t/, "") ?? "";
 const schemeFromBundleId = `manus${timestamp}`;
 
 const env = {
-  // App branding - update these values directly (do not use env vars)
   appName: "智能衣橱",
   appSlug: "smart-wardrobe",
-  // S3 URL of the app logo - set this to the URL returned by generate_image when creating custom logo
-  // Leave empty to use the default icon from assets/images/icon.png
-  logoUrl: "https://files.manuscdn.com/user_upload_by_module/session_file/310519663273993954/ZapcbqxswldiRWHd.png",
+  logoUrl:
+    "https://files.manuscdn.com/user_upload_by_module/session_file/310519663273993954/ZapcbqxswldiRWHd.png",
   scheme: schemeFromBundleId,
   iosBundleId: bundleId,
   androidPackage: bundleId,
@@ -31,6 +28,14 @@ const config: ExpoConfig = {
   scheme: env.scheme,
   userInterfaceStyle: "automatic",
   newArchEnabled: true,
+
+  /** ✅ 这里是关键新增内容 */
+  extra: {
+    eas: {
+      projectId: "995ce46f-ae7e-473a-81f9-7f0a21fae8a1",
+    },
+  },
+
   ios: {
     supportsTablet: true,
     bundleIdentifier: env.iosBundleId,
@@ -70,7 +75,8 @@ const config: ExpoConfig = {
     [
       "expo-audio",
       {
-        microphonePermission: "Allow $(PRODUCT_NAME) to access your microphone.",
+        microphonePermission:
+          "Allow $(PRODUCT_NAME) to access your microphone.",
       },
     ],
     [
